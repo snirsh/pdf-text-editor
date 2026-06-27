@@ -40,7 +40,7 @@ test('uploads, edits, and downloads a PDF', async ({ page }, testInfo) => {
 
   await createSamplePdf(samplePath)
 
-  await page.goto('/')
+  await page.goto('./')
   await expect(page.getByRole('heading', { name: 'PDF Text Editor' })).toBeVisible()
 
   await page.locator('input[type="file"]').setInputFiles(samplePath)
