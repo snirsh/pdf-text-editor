@@ -117,6 +117,30 @@ const formatFileSize = (size: number) => {
 const getEditedFileName = (fileName: string) =>
   fileName.replace(/\.pdf$/i, '') + '-edited.pdf'
 
+const cloneArrayBuffer = (buffer: ArrayBuffer) => buffer.slice(0)
+
+const readBlobAsArrayBuffer = (blob: Blob) => {
+  if (typeof blob.arrayBuffer === 'function') {
+    return blob.arrayBuffer()
+  }
+
+  return new Promise<ArrayBuffer>((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onerror = () => {
+      reject(reader.error ?? new Error('Could not read the selected file.'))
+    }
+    reader.onload = () => {
+      if (reader.result instanceof ArrayBuffer) {
+        resolve(reader.result)
+      } else {
+        reject(new Error('Could not read the selected file.'))
+      }
+    }
+    reader.readAsArrayBuffer(blob)
+  })
+}
+
 const getBoxStyle = (box: TextBox): CSSProperties => ({
   height: `${box.height}px`,
   left: `${box.left}px`,
@@ -241,7 +265,7 @@ const wrapText = (text: string, font: PDFFont, size: number, maxWidth: number) =
 
         const segments = splitLongWord(word, font, size, maxWidth)
         lines.push(...segments.slice(0, -1))
-        currentLine = segments.at(-1) ?? ''
+        currentLine = segments[segments.length - 1] ?? ''
         continue
       }
 
@@ -271,14 +295,18 @@ const loadFontBytes = async (fileName: string) => {
     throw new Error(`Could not load ${fileName}`)
   }
 
-  return response.arrayBuffer()
+  if (typeof response.arrayBuffer === 'function') {
+    return response.arrayBuffer()
+  }
+
+  return readBlobAsArrayBuffer(await response.blob())
 }
 
 const exportEditedPdf = async (
   originalBytes: ArrayBuffer,
   edits: TextEdit[],
 ) => {
-  const pdfDoc = await PDFLibDocument.load(originalBytes.slice(0))
+  const pdfDoc = await PDFLibDocument.load(cloneArrayBuffer(originalBytes))
   pdfDoc.registerFontkit(fontkit)
 
   const [latinFontBytes, hebrewFontBytes] = await Promise.all([
@@ -580,9 +608,9 @@ function App() {
     setError('')
 
     try {
-      const fileBytes = await file.arrayBuffer()
+      const fileBytes = await readBlobAsArrayBuffer(file)
       const loadingTask = pdfjsLib.getDocument({
-        data: new Uint8Array(fileBytes.slice(0)),
+        data: new Uint8Array(cloneArrayBuffer(fileBytes)),
       })
       const loadedPdf = await loadingTask.promise
 
@@ -590,7 +618,7 @@ function App() {
       pdfDocumentRef.current = loadedPdf
 
       setPdfDocument(loadedPdf)
-      setOriginalBytes(fileBytes.slice(0))
+      setOriginalBytes(cloneArrayBuffer(fileBytes))
       setFileName(file.name)
       setFileSize(file.size)
       setPageCount(loadedPdf.numPages)
@@ -611,9 +639,16 @@ function App() {
 
   const handleFiles = useCallback(
     (files: FileList | File[]) => {
-      const nextFile = Array.from(files).find((file) =>
-        file.name.toLowerCase().endsWith('.pdf'),
-      )
+      let nextFile: File | undefined
+
+      for (let index = 0; index < files.length; index += 1) {
+        const file = files[index]
+
+        if (file?.name.toLowerCase().endsWith('.pdf')) {
+          nextFile = file
+          break
+        }
+      }
 
       if (!nextFile) {
         setError('Choose a PDF file.')
@@ -694,7 +729,7 @@ function App() {
     try {
       const editedBytes = editList.length
         ? await exportEditedPdf(originalBytes, editList)
-        : new Uint8Array(originalBytes.slice(0))
+        : new Uint8Array(cloneArrayBuffer(originalBytes))
 
       downloadBytes(editedBytes, getEditedFileName(fileName || 'document.pdf'))
     } catch (exportError) {

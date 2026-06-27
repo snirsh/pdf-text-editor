@@ -8,6 +8,7 @@ export default defineConfig({
   base: repositoryName ? `/${repositoryName}/` : '/',
   build: {
     chunkSizeWarningLimit: 2500,
+    target: 'es2018',
   },
   plugins: [react()],
 })

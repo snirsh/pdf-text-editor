@@ -39,6 +39,16 @@ test('uploads, edits, and downloads a PDF', async ({ page }, testInfo) => {
   const editedPath = testInfo.outputPath('sample-edited.pdf')
 
   await createSamplePdf(samplePath)
+  await page.addInitScript(() => {
+    Object.defineProperty(Blob.prototype, 'arrayBuffer', {
+      configurable: true,
+      value: undefined,
+    })
+    Object.defineProperty(Response.prototype, 'arrayBuffer', {
+      configurable: true,
+      value: undefined,
+    })
+  })
 
   await page.goto('./')
   await expect(page.getByRole('heading', { name: 'PDF Text Editor' })).toBeVisible()
